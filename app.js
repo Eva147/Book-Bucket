@@ -5,6 +5,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
+const res = require('express/lib/response');
 const URL = process.env.URL;
 
 const app = express();
@@ -37,60 +38,100 @@ async function main() {
     const Book = mongoose.model('Book', bookListSchema);
     const Review = mongoose.model('Review', bookReviewSchema);
 
-    // /BOOKS route
-    app.get('/books', function(req, res){
-        Book.find(function(err, foundBooks){
-            if(!err){
-                res.send(foundBooks);
-            } else {
-                res.send(err);
-            }
-        });
-    });
-    app.post('/books', function(req, res){
-        // create a new book through the post request
-        const newBook = new Book ({
-            author: req.body.bookAuthor,
-            name: req.body.bookTitle
-        });
-        // save new book to mongoDB
-        newBook.save(function(err){
-            if (!err) {
-                res.send('A new book successfully added.')
-            } else {
-                res.send(err);
-            }
-        });
-    });
-    
+    ///////////////////////////////////// Requests targetting ALL books and reviews ///////////////////////////////////////////////////////
 
-    // /REVIEWS route
-    app.get('/reviews', function(req, res){
-        Review.find(function(err, foundReviews){
-            if(!err){
-                res.send(foundReviews);
-            } else {
-                res.send(err);
-            }
+    // BOOKS route
+    app.route('/books')
+        .get(function(req, res){
+            Book.find(function(err, foundBooks){
+                if(!err){
+                    res.send(foundBooks);
+                } else {
+                    res.send(err);
+                }
+            });
+        })
+        .post(function(req, res){
+            // create a new book through the post request
+            const newBook = new Book ({
+                author: req.body.bookAuthor,
+                name: req.body.bookTitle
+            });
+            // save new book to mongoDB
+            newBook.save(function(err){
+                if (!err) {
+                    res.send('A new book successfully added.')
+                } else {
+                    res.send(err);
+                }
+            });
+        })
+        // delete ALL books in a list
+        .delete(function(req, res){
+            Book.deleteMany(function(err) {
+                if (err){
+                    res.send('All books successfully deleted.')
+                } else {
+                    res.send(err);
+                }
+            });
         });
-    });
-    app.post('/reviews', function(req, res){
-        // create a new book through the post request
-        const newReview = new Review ({
-            author: reviewBookAuthor,
-            name: reviewBookTitle,
-            rating: bookRating,
-            content: reviewContent
+
+
+    // REVIEWS route
+    app.route('/reviews')
+        // find all reviews
+        .get(function(req, res){
+            Review.find(function(err, foundReviews){
+                if(!err){
+                    res.send(foundReviews);
+                } else {
+                    res.send(err);
+                }
+            });
+        })
+        // create a new review
+        .post(function(req, res){
+            const newReview = new Review ({
+                author: reviewBookAuthor,
+                name: reviewBookTitle,
+                rating: bookRating,
+                content: reviewContent
+            });
+            // save review to mongoDB
+            newReview.save(function(err){
+                if (!err) {
+                    res.send('A new review successfully added.')
+                } else {
+                    res.send(err);
+                }
+            });
+        })
+        // delete ALL reviews
+        .delete(function(req, res){
+            Review.deleteMany(function(err) {
+                if (err){
+                    res.send('All reviews successfully deleted.')
+                } else {
+                    res.send(err);
+                }
+            });
         });
-        // save review to mongoDB
-        newReview.save(function(err){
-            if (!err) {
-                res.send('A new review successfully added.')
-            } else {
-                res.send(err);
-            }
+
+
+    ///////////////////////////////////// Requests targetting a SPECIFIC books and reviews ///////////////////////////////////////////////////////
+    app.route('/books/:bookTitle')
+        .get((req, res) => {
+            Book.findOne({name: req.params.bookTitle}, function(err, foundBook){
+                if (!err) {
+                    res.send(foundBook);
+                } else {
+                    res.send('No books matching this title was found.');
+                }      
+            });
+            
         });
-    });
+      
 
 }
 
