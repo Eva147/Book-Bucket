@@ -9,6 +9,7 @@ const res = require('express/lib/response');
 const URL = process.env.URL;
 
 const app = express();
+
 // set view engine to use EJS as a templating engine
 app.set('view engine', 'ejs');
 // set body-parser to pass requests from the web page
@@ -26,11 +27,11 @@ async function main() {
     // create Mongoose schema
     const bookListSchema = new mongoose.Schema({
         author: String,
-        name: String
+        title: String
     });
     const bookReviewSchema = new mongoose.Schema({
         author: String,
-        name: String,
+        title: String,
         rating: Number,
         content: String
     });
@@ -54,8 +55,8 @@ async function main() {
         .post(function(req, res){
             // create a new book through the post request
             const newBook = new Book ({
-                author: req.body.bookAuthor,
-                name: req.body.bookTitle
+                author: req.body.author,
+                title: req.body.title
             });
             // save new book to mongoDB
             newBook.save(function(err){
@@ -94,7 +95,7 @@ async function main() {
         .post(function(req, res){
             const newReview = new Review ({
                 author: reviewBookAuthor,
-                name: reviewBookTitle,
+                title: reviewBookTitle,
                 rating: bookRating,
                 content: reviewContent
             });
@@ -120,9 +121,10 @@ async function main() {
 
 
     ///////////////////////////////////// Requests targetting a SPECIFIC books and reviews ///////////////////////////////////////////////////////
-    app.route('/books/:bookTitle')
+    //find one book in the bucket
+    app.route('/books/:title')
         .get((req, res) => {
-            Book.findOne({name: req.params.bookTitle}, function(err, foundBook){
+            Book.findOne({title: req.params.title}, function(err, foundBook){
                 if (!err) {
                     res.send(foundBook);
                 } else {
@@ -130,10 +132,59 @@ async function main() {
                 }      
             });
             
+        })
+        //update author AND title
+        .put((req, res) => {
+            Book.findOneAndUpdate(
+                {title: req.params.title},
+                {author: req.body.author, title: req.body.title},
+                {overwrite: true},
+                function(err){
+                    if(!err){
+                        res.send("The book successfully updated.");
+                    } else {
+                        res.send(err);
+                    }
+                }
+            );
+
+        })
+        // update title OR author
+        .patch((req, res) => {
+            Book.findOneAndUpdate(
+                {title: req.params.title},
+                {$set: req.body},
+                function(err){
+                    if(!err){
+                        res.send("The book successfully updated.");
+                    } else {
+                        res.send(err);
+                    }
+                }
+            );
+        })
+        // delete a specific book
+        .delete((req, res) => {
+            Book.deleteOne(
+                {title: req.params.title},
+                function(err){
+                    if(!err){
+                        res.send("The book successfully deleted.");
+                    } else {
+                        res.send(err);
+                    }
+                }
+            );
         });
       
 
 }
+
+
+
+
+
+
 
 app.listen(3000, function() {
   console.log('Server started on port 3000');
