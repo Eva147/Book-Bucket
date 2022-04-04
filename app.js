@@ -21,10 +21,30 @@ app.use(express.static('public'));
 // connect mongoose to MongoDB
 main().catch(err => console.log(err));
 
+
+
+app.get('/', (req, res) => {
+    res.render('home');
+});
+
+app.get('/login', (req, res) => {
+    res.render('login');
+});
+
+app.get('/register', (req, res) => {
+    res.render('register');
+});
+
+
 async function main() {
   await mongoose.connect(URL);
 
     // create Mongoose schema
+    const userSchema = new mongoose.Schema({
+        email: String,
+        password: String
+    });
+
     const bookListSchema = new mongoose.Schema({
         author: String,
         title: String
@@ -36,8 +56,45 @@ async function main() {
         content: String
     });
 
+    const User = mongoose.model('User', userSchema);
     const Book = mongoose.model('Book', bookListSchema);
     const Review = mongoose.model('Review', bookReviewSchema);
+
+
+    ///////////////////////////////////// REGISTER ROUTE ///////////////////////////////////////////////////////
+
+    app.post('/register', (req, res) => {
+        const newUser = new User({
+            email: req.body.username,
+            password: req.body.password
+        });
+        newUser.save((err) => {
+            if(err) {
+                console.log(err);
+            } else {
+                res.render('books');
+                console.log("A new user saccessfully added.")
+            }
+        });
+    });
+    app.post('/login', (req, res) => {
+        const userName = req.body.username;
+        const loginPassword = req.body.password; 
+        console.log(userName, loginPassword);
+        User.findOne({email: userName}, (err, foundUser) => {
+            if (err) {
+                console.log(err);
+            } else {
+                if(foundUser) {
+                    if (foundUser.password === loginPassword) {
+                        res.render('books');
+                    } else {
+                        alert('Try again');
+                    }
+                } 
+            }
+        });
+    });
 
     ///////////////////////////////////// Requests targetting ALL books and reviews ///////////////////////////////////////////////////////
 
