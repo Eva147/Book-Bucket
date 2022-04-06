@@ -5,7 +5,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
-const res = require('express/lib/response');
+const session = require('express-session');
+const passport = require('passport');
+const passportLocalMongoose = require('passport-local-mongoose');
+
+
 const URL = process.env.URL;
 
 const app = express();
@@ -18,11 +22,28 @@ app.use(bodyParser.urlencoded({
 }));
 // use the public directory to store the static files
 app.use(express.static('public'));
+
+//AUTHENTICATION
+
+// use the session package to set up the session
+// set up initial configurations for the session
+app.use(session({
+    secret: process.env.SECRET_WORD,
+    resave: false,
+    saveUninitialized: false
+}));
+// initialize the passport to start using it
+app.use(passport.initialize());
+// tell the app to use the passport to set up the session
+app.use(passport.session());
+
+
+
 // connect mongoose to MongoDB
 main().catch(err => console.log(err));
 
 
-
+// ROUTES
 app.get('/', (req, res) => {
     res.render('home');
 });
@@ -35,6 +56,19 @@ app.get('/register', (req, res) => {
     res.render('register');
 });
 
+app.get('/books', (req, res) => {
+    if(req.isAuthenticated()) {
+        res.render('books');
+    } else {
+        res.redirect('login');
+    }
+});
+
+app.get('/logout', (req, res) => {
+    req.logout();
+    res.redirect('/');
+});
+
 
 async function main() {
   await mongoose.connect(URL);
@@ -44,6 +78,9 @@ async function main() {
         email: String,
         password: String
     });
+
+    // plugin for hash and salt users passwords
+    userSchema.plugin(passportLocalMongoose);
 
     const bookListSchema = new mongoose.Schema({
         author: String,
@@ -57,6 +94,14 @@ async function main() {
     });
 
     const User = mongoose.model('User', userSchema);
+
+    // use static authenticate method of model in LocalStrategy (npm passport-local-mongoose)
+    passport.use(User.createStrategy());
+
+    // use static serialize and deserialize of model for passport session support (npm passport-local-mongoose)
+    passport.serializeUser(User.serializeUser());
+    passport.deserializeUser(User.deserializeUser());
+
     const Book = mongoose.model('Book', bookListSchema);
     const Review = mongoose.model('Review', bookReviewSchema);
 
@@ -64,34 +109,32 @@ async function main() {
     ///////////////////////////////////// REGISTER ROUTE ///////////////////////////////////////////////////////
 
     app.post('/register', (req, res) => {
-        const newUser = new User({
-            email: req.body.username,
-            password: req.body.password
-        });
-        newUser.save((err) => {
-            if(err) {
+        User.register({username: req.body.username}, req.body.password, (err, user) => {
+            if (err) {
                 console.log(err);
+                res.redirect('/register');
             } else {
-                res.render('books');
-                console.log("A new user saccessfully added.")
+                passport.authenticate('local')(req, res, function() {
+                    res.redirect('/books');
+                })
             }
-        });
+        })
+
+        
     });
     app.post('/login', (req, res) => {
-        const userName = req.body.username;
-        const loginPassword = req.body.password; 
-        console.log(userName, loginPassword);
-        User.findOne({email: userName}, (err, foundUser) => {
+        const user = new User({
+            username: req.body.username,
+            password: req.body.password
+        });
+
+        req.login(user, function(err) {
             if (err) {
                 console.log(err);
             } else {
-                if(foundUser) {
-                    if (foundUser.password === loginPassword) {
-                        res.render('books');
-                    } else {
-                        alert('Try again');
-                    }
-                } 
+                passport.authenticate('local')(req, res, function() {
+                    res.redirect('/books');
+                });
             }
         });
     });
