@@ -8,7 +8,8 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const passport = require('passport');
 const passportLocalMongoose = require('passport-local-mongoose');
-
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-find-or-create');
 
 const URL = process.env.URL;
 
@@ -23,7 +24,7 @@ app.use(bodyParser.urlencoded({
 // use the public directory to store the static files
 app.use(express.static('public'));
 
-//AUTHENTICATION
+///////////////////////// AUTHENTICATION CONFIGURATIONS ////////////////////////////////////////////
 
 // use the session package to set up the session
 // set up initial configurations for the session
@@ -43,44 +44,20 @@ app.use(passport.session());
 main().catch(err => console.log(err));
 
 
-// ROUTES
-app.get('/', (req, res) => {
-    res.render('home');
-});
-
-app.get('/login', (req, res) => {
-    res.render('login');
-});
-
-app.get('/register', (req, res) => {
-    res.render('register');
-});
-
-app.get('/books', (req, res) => {
-    if(req.isAuthenticated()) {
-        res.render('books');
-    } else {
-        res.redirect('login');
-    }
-});
-
-app.get('/logout', (req, res) => {
-    req.logout();
-    res.redirect('/');
-});
-
-
 async function main() {
   await mongoose.connect(URL);
 
     // create Mongoose schema
     const userSchema = new mongoose.Schema({
         email: String,
-        password: String
+        password: String,
+        googleId: String
     });
 
     // plugin for hash and salt users passwords
     userSchema.plugin(passportLocalMongoose);
+    // plugin for mongoose findOrCreate user
+    userSchema.plugin(findOrCreate);
 
     const bookListSchema = new mongoose.Schema({
         author: String,
@@ -98,13 +75,74 @@ async function main() {
     // use static authenticate method of model in LocalStrategy (npm passport-local-mongoose)
     passport.use(User.createStrategy());
 
-    // use static serialize and deserialize of model for passport session support (npm passport-local-mongoose)
-    passport.serializeUser(User.serializeUser());
-    passport.deserializeUser(User.deserializeUser());
+    // use serialize and deserialize of model for passport session support (passportjs.com)
+    passport.serializeUser(function(user, done) {
+        done(null, user.id);
+      });
+    
+      passport.deserializeUser(function(id, done) {
+        User.findById(id, function(err, user) {
+          done(err, user);
+        });
+      });
+
+    // The Google authentication strategy
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: 'http://localhost:3000/auth/google/books',
+        // userProfileURL: 'https://googleapis.com/oauth2/v3/userinfo'
+      },
+      function(accessToken, refreshToken, profile, cb) {
+        User.findOrCreate({ googleId: profile.id }, function (err, user) {
+          return cb(err, user);
+        });
+      }
+    ));
 
     const Book = mongoose.model('Book', bookListSchema);
     const Review = mongoose.model('Review', bookReviewSchema);
 
+
+    //////////////////////////////////////////// ROUTES ///////////////////////////////////////////////
+
+    app.get('/', (req, res) => {
+        res.render('home');
+    });
+
+    // Authentication route through Google
+    app.get("/auth/google",
+    passport.authenticate("google", {scope: ["profile"] })
+    );
+
+    app.get("/auth/google/books",
+    passport.authenticate("google", { failureRedirect: "/login'" }),
+    function(req, res) {
+      // Successful authentication, redirect to the books page
+      res.redirect("/books");
+    });
+
+
+    app.get('/login', (req, res) => {
+        res.render('login');
+    });
+
+    app.get('/register', (req, res) => {
+        res.render('register');
+    });
+
+    app.get('/books', (req, res) => {
+        if(req.isAuthenticated()) {
+            res.render('books');
+        } else {
+            res.redirect('login');
+        }
+    });
+
+    app.get('/logout', (req, res) => {
+        req.logout();
+        res.redirect('/');
+    });
 
     ///////////////////////////////////// REGISTER ROUTE ///////////////////////////////////////////////////////
 
@@ -118,10 +156,9 @@ async function main() {
                     res.redirect('/books');
                 })
             }
-        })
-
-        
+        })        
     });
+
     app.post('/login', (req, res) => {
         const user = new User({
             username: req.body.username,
