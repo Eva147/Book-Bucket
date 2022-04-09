@@ -9,6 +9,7 @@ const session = require('express-session');
 const passport = require('passport');
 const passportLocalMongoose = require('passport-local-mongoose');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require("passport-facebook").Strategy;
 const findOrCreate = require('mongoose-find-or-create');
 
 const URL = process.env.URL;
@@ -51,24 +52,14 @@ async function main() {
     const userSchema = new mongoose.Schema({
         email: String,
         password: String,
-        googleId: String
+        googleId: String,
+        facebookId: String,
     });
 
     // plugin for hash and salt users passwords
     userSchema.plugin(passportLocalMongoose);
     // plugin for mongoose findOrCreate user
     userSchema.plugin(findOrCreate);
-
-    const bookListSchema = new mongoose.Schema({
-        author: String,
-        title: String
-    });
-    const bookReviewSchema = new mongoose.Schema({
-        author: String,
-        title: String,
-        rating: Number,
-        content: String
-    });
 
     const User = mongoose.model('User', userSchema);
 
@@ -94,11 +85,34 @@ async function main() {
         // userProfileURL: 'https://googleapis.com/oauth2/v3/userinfo'
       },
       function(accessToken, refreshToken, profile, cb) {
-        User.findOrCreate({ googleId: profile.id }, function (err, user) {
+        User.findOrCreate({ username: profile.displayName, googleId: profile.id }, function (err, user) {
           return cb(err, user);
         });
       }
     ));
+
+    passport.use(new FacebookStrategy({
+        clientID: process.env.FB_APP_ID,
+        clientSecret: process.env.FB_APP_SECRET,
+        callbackURL: "http://localhost:3000/auth/facebook/books"
+      },
+      function(accessToken, refreshToken, profile, cb) {
+        User.findOrCreate({ username: profile.displayName, facebookId: profile.id }, function(err, user) {
+          return cb(err, user);
+        });
+      }
+    ));
+
+    const bookListSchema = new mongoose.Schema({
+        userId: User.id,
+        author: String,
+        title: String
+    });
+    const bookReviewSchema = new mongoose.Schema({
+        title: String,
+        rating: Number,
+        content: String
+    });
 
     const Book = mongoose.model('Book', bookListSchema);
     const Review = mongoose.model('Review', bookReviewSchema);
@@ -121,6 +135,17 @@ async function main() {
       // Successful authentication, redirect to the books page
       res.redirect("/books");
     });
+
+    // Authentication route through Facebook
+    app.get("/auth/facebook",
+    passport.authenticate("facebook"));
+
+    app.get("/auth/facebook/books",
+        passport.authenticate("facebook", { failureRedirect: "/login" }),
+        function(req, res) {
+        res.redirect("/books");
+        }
+    );
 
 
     app.get('/login', (req, res) => {
@@ -314,7 +339,7 @@ async function main() {
             );
         });
       
-
+    // mongoose.connection.close();
 }
 
 
